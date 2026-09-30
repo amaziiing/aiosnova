@@ -40,6 +40,18 @@ const COMPANY_STORAGE_KEY = 'aios.companyId'
  */
 const INLINE_SECTION_IDS = new Set(['overview', 'ai'])
 
+/**
+ * A section is worth a chooser panel only when it actually offers a choice.
+ * Single-module sections (Platform Admin) and the inline ones (Dashboard, AI)
+ * get a plain name tip on the collapsed rail instead.
+ */
+function hasModuleChoice(section: SidebarSection): boolean {
+  if (INLINE_SECTION_IDS.has(section.id)) {
+    return false
+  }
+  return section.children.filter((node) => node.kind === 'group').length > 1
+}
+
 type CompanyOption = { value: string; label: string }
 
 type Level2Item =
@@ -429,6 +441,7 @@ function SectionBlock({
   onToggle,
   collapsed,
   flyout,
+  hover,
 }: {
   section: SidebarSection
   openIds: Set<string>
@@ -439,6 +452,11 @@ function SectionBlock({
     onEnter: (anchor: HTMLButtonElement) => void
     onLeave: () => void
     onActivate: (anchor: HTMLButtonElement) => void
+  }
+  /** Collapsed rail: hovering an icon asks the parent for its name panel/tip. */
+  hover?: {
+    onEnter: (anchor: HTMLButtonElement) => void
+    onLeave: () => void
   }
 }) {
   const SectionIcon = getSectionIcon(section.id)
@@ -451,8 +469,11 @@ function SectionBlock({
         <button
           type="button"
           className="sidebar__item sidebar__section-icon-only"
-          title={section.label}
+          aria-label={section.label}
           onClick={() => onToggle(section.children[0]?.kind === 'group' ? section.children[0].id : section.id)}
+          onMouseEnter={(event) => hover?.onEnter(event.currentTarget)}
+          onMouseLeave={hover?.onLeave}
+          onFocus={(event) => hover?.onEnter(event.currentTarget)}
         >
           <span className="sidebar__icon">
             <SectionIcon />
@@ -599,7 +620,8 @@ export function Sidebar() {
   const [groupCompaniesOpen, setGroupCompaniesOpen] = useState(true)
   const [hoveredGroupId, setHoveredGroupId] = useState<string | null>(null)
   const [flyoutSectionId, setFlyoutSectionId] = useState<string | null>(null)
-  const [flyoutTop, setFlyoutTop] = useState(0)
+  const [popoverAnchor, setPopoverAnchor] = useState({ top: 0, center: 0 })
+  const [iconTipLabel, setIconTipLabel] = useState<string | null>(null)
   const hideFlyoutTimerRef = useRef<number | null>(null)
   const shellRef = useRef<HTMLDivElement>(null)
   const [openIds, setOpenIds] = useState<Set<string>>(() => new Set())
@@ -643,7 +665,7 @@ export function Sidebar() {
   }, [])
 
   useEffect(() => {
-    if (flyoutSectionId === null) {
+    if (flyoutSectionId === null && iconTipLabel === null) {
       return
     }
 
@@ -655,12 +677,12 @@ export function Sidebar() {
       if (target.closest('.sidebar-flyout--modules') || target.closest('[data-section-flyout="true"]')) {
         return
       }
-      setFlyoutSectionId(null)
+      closePopovers()
     }
 
     function handleKeyDown(event: KeyboardEvent) {
       if (event.key === 'Escape') {
-        setFlyoutSectionId(null)
+        closePopovers()
       }
     }
 
@@ -670,7 +692,7 @@ export function Sidebar() {
       document.removeEventListener('pointerdown', handlePointerDown)
       document.removeEventListener('keydown', handleKeyDown)
     }
-  }, [flyoutSectionId])
+  }, [flyoutSectionId, iconTipLabel])
 
   useEffect(() => {
     if (!isHydrated) {
@@ -736,25 +758,28 @@ export function Sidebar() {
   function scheduleHideFlyout() {
     cancelHideFlyout()
     hideFlyoutTimerRef.current = window.setTimeout(() => {
-      setHoveredGroupId(null)
-      setFlyoutSectionId(null)
+      closePopovers()
       hideFlyoutTimerRef.current = null
     }, 120)
   }
 
-  function closeFlyouts() {
+  function closePopovers() {
     setHoveredGroupId(null)
     setFlyoutSectionId(null)
+    setIconTipLabel(null)
   }
 
-  function positionFlyoutTop(anchor: HTMLElement) {
+  function measureAnchor(anchor: HTMLElement) {
     const shell = shellRef.current
     if (!shell) {
       return
     }
     const shellRect = shell.getBoundingClientRect()
     const anchorRect = anchor.getBoundingClientRect()
-    setFlyoutTop(Math.max(0, anchorRect.top - shellRect.top))
+    setPopoverAnchor({
+      top: Math.max(0, anchorRect.top - shellRect.top),
+      center: Math.max(0, anchorRect.top - shellRect.top + anchorRect.height / 2),
+    })
   }
 
   function handleHoverLevel2(item: Level2Item, anchor: HTMLButtonElement) {
@@ -766,15 +791,30 @@ export function Sidebar() {
     }
 
     setFlyoutSectionId(null)
-    positionFlyoutTop(anchor)
+    setIconTipLabel(null)
+    measureAnchor(anchor)
     setHoveredGroupId(item.id)
   }
 
   function handleOpenSectionFlyout(section: SidebarSection, anchor: HTMLButtonElement) {
     cancelHideFlyout()
     setHoveredGroupId(null)
-    positionFlyoutTop(anchor)
+    setIconTipLabel(null)
+    measureAnchor(anchor)
     setFlyoutSectionId(section.id)
+  }
+
+  /** Collapsed rail: sections with modules show the panel, the rest a name tip. */
+  function handleHoverRailIcon(section: SidebarSection, anchor: HTMLButtonElement) {
+    if (collapsed && !hasModuleChoice(section)) {
+      cancelHideFlyout()
+      setHoveredGroupId(null)
+      setFlyoutSectionId(null)
+      measureAnchor(anchor)
+      setIconTipLabel(section.label)
+      return
+    }
+    handleOpenSectionFlyout(section, anchor)
   }
 
   function handleSelectLevel2(item: Level2Item) {
@@ -891,6 +931,10 @@ export function Sidebar() {
                     onActivate: (anchor) => handleOpenSectionFlyout(section, anchor),
                   }
             }
+            hover={{
+              onEnter: (anchor) => handleHoverRailIcon(section, anchor),
+              onLeave: scheduleHideFlyout,
+            }}
           />
         ))}
       </nav>
@@ -919,21 +963,27 @@ export function Sidebar() {
         <GroupCompaniesFlyout
           companies={activeGroup.companies}
           selectedCompanyId={companyId}
-          top={flyoutTop}
+          top={popoverAnchor.top}
           onSelectCompany={handleSelectCompanyFromGroup}
           onMouseEnter={cancelHideFlyout}
           onMouseLeave={scheduleHideFlyout}
         />
       ) : null}
 
-      {flyoutSection && !collapsed ? (
+      {flyoutSection ? (
         <SectionModulesFlyout
           section={flyoutSection}
-          top={flyoutTop}
+          top={popoverAnchor.top}
           onMouseEnter={cancelHideFlyout}
           onMouseLeave={scheduleHideFlyout}
-          onNavigate={closeFlyouts}
+          onNavigate={closePopovers}
         />
+      ) : null}
+
+      {iconTipLabel ? (
+        <div className="sidebar-tip" role="tooltip" style={{ top: popoverAnchor.center }}>
+          {iconTipLabel}
+        </div>
       ) : null}
     </div>
   )
