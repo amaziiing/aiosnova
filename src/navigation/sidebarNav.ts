@@ -474,33 +474,6 @@ export function findSidebarLabelByPath(path: string): string | null {
   return utility?.label ?? null
 }
 
-export function collectAncestorGroupIds(pathname: string): string[] {
-  const ids: string[] = []
-
-  function walk(nodes: SidebarNode[], ancestors: string[]): boolean {
-    for (const node of nodes) {
-      if (node.kind === 'link' && node.path === pathname) {
-        ids.push(...ancestors)
-        return true
-      }
-      if (node.kind === 'group') {
-        if (walk(node.children, [...ancestors, node.id])) {
-          return true
-        }
-      }
-    }
-    return false
-  }
-
-  for (const section of sidebarSections) {
-    if (walk(section.children, [section.id])) {
-      break
-    }
-  }
-
-  return ids
-}
-
 export function findModuleByPath(pathname: string): ModuleMatch | null {
   for (const section of sidebarSections) {
     for (const node of section.children) {

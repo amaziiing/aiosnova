@@ -205,11 +205,6 @@
   color: var(--sidebar-muted);
 }
 
-.sidebar__context-option:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
 .sidebar__company-context {
   flex-shrink: 0;
   margin: 0 0.7rem 0.55rem;
@@ -259,18 +254,8 @@
   margin-top: 0.85rem;
 }
 
-.sidebar__section-label {
-  margin: 0 0 0.28rem;
-  padding: 0 0.7rem;
-  font-size: 0.72rem;
-  font-weight: 600;
-  letter-spacing: 0.01em;
-  color: var(--sidebar-muted);
-}
-
 .sidebar__item,
-.sidebar__group-toggle,
-.sidebar__link {
+.sidebar__group-toggle {
   width: 100%;
   display: flex;
   align-items: center;
@@ -289,8 +274,7 @@
 }
 
 .sidebar__item:hover,
-.sidebar__group-toggle:hover,
-.sidebar__link:hover {
+.sidebar__group-toggle:hover {
   background: var(--sidebar-hover);
   text-decoration: none;
   color: var(--sidebar-ink);
@@ -360,38 +344,6 @@
 .sidebar__expander svg {
   width: 0.82rem;
   height: 0.82rem;
-}
-
-.sidebar__list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-}
-
-.sidebar__subtree {
-  margin: 0.12rem 0 0.35rem 1.05rem;
-  padding: 0.12rem 0 0.12rem 0.7rem;
-  border-left: 1px solid var(--color-brand);
-}
-
-.sidebar__list--depth-2 .sidebar__link {
-  justify-content: flex-start;
-  min-height: 2.05rem;
-  padding: 0.38rem 0.7rem;
-  border-radius: 999px;
-  color: var(--sidebar-ink);
-  font-weight: 500;
-}
-
-.sidebar__list--depth-2 .sidebar__link--active {
-  background: var(--color-brand-soft);
-  color: var(--color-brand);
-  font-weight: 650;
-  box-shadow: none;
-}
-
-.sidebar__group {
-  margin-top: 0.08rem;
 }
 
 .sidebar__footer {
@@ -478,7 +430,6 @@
 .sidebar--collapsed .sidebar__label,
 .sidebar--collapsed .sidebar__expander,
 .sidebar--collapsed .sidebar__user,
-.sidebar--collapsed .sidebar__section-label,
 .sidebar--collapsed .sidebar__context,
 .sidebar--collapsed .sidebar__search input,
 .sidebar--collapsed .sidebar__company-context {
@@ -508,7 +459,6 @@
 
 .sidebar--collapsed .sidebar__item,
 .sidebar--collapsed .sidebar__group-toggle,
-.sidebar--collapsed .sidebar__link,
 .sidebar--collapsed .sidebar__section-icon-only {
   justify-content: center;
   padding-inline: 0.35rem;
@@ -563,13 +513,6 @@
 [data-theme='dark'] .sidebar__company-context {
   background: color-mix(in srgb, var(--color-brand) 18%, var(--color-bg-muted));
   border-color: color-mix(in srgb, var(--color-brand) 34%, var(--color-border));
-}
-
-[data-theme='dark'] .sidebar__context-option:hover,
-[data-theme='dark'] .sidebar__context-option.is-selected,
-[data-theme='dark'] .sidebar__context-option.is-selected:hover {
-  background: var(--color-bg-muted);
-  color: var(--color-text);
 }
 
 [data-theme='dark'] .sidebar-flyout {

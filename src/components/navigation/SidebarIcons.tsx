@@ -172,22 +172,6 @@ export function IconChevron(props: IconProps) {
   )
 }
 
-export function IconPlus(props: IconProps) {
-  return (
-    <Svg {...props}>
-      <path d="M12 5v14M5 12h14" />
-    </Svg>
-  )
-}
-
-export function IconMinus(props: IconProps) {
-  return (
-    <Svg {...props}>
-      <path d="M5 12h14" />
-    </Svg>
-  )
-}
-
 export function IconPanelLeft(props: IconProps) {
   return (
     <Svg {...props}>
@@ -403,8 +387,4 @@ export function getSectionIcon(id: string) {
 
 export function getModuleIcon(label: string) {
   return MODULE_ICONS[label] ?? IconFolder
-}
-
-export function getLinkIcon() {
-  return IconDot
 }
