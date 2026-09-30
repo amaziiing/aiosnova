@@ -169,6 +169,14 @@
   min-width: 0;
 }
 
+/* Collapsed rail: the GROUP COMPANIES entry, mirroring .sidebar__context spacing. */
+.sidebar__rail-context {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  padding: 0 0.5rem 0.45rem;
+}
+
 .sidebar__context-toggle,
 .sidebar__context-option,
 .sidebar-flyout__link {
@@ -745,6 +753,22 @@
    expanded sidebar width. */
 .sidebar-shell--collapsed .sidebar-flyout {
   left: var(--sidebar-collapsed-width);
+}
+
+.sidebar-flyout__link-expander {
+  display: grid;
+  place-items: center;
+  width: 0.95rem;
+  height: 0.95rem;
+  flex-shrink: 0;
+  margin-left: auto;
+  opacity: 0.72;
+  color: inherit;
+}
+
+.sidebar-flyout__link-expander svg {
+  width: 0.82rem;
+  height: 0.82rem;
 }
 
 /* Icon name tip on the collapsed rail (replaces the native title tooltip). */

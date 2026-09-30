@@ -4,6 +4,7 @@ import { Sidebar } from '@/components/navigation/Sidebar'
 import { ThemeToggle } from '@/components/ui/ThemeToggle'
 import { useAuthStore } from '@/stores/authStore'
 import { ModuleTabs } from './ModuleTabs'
+import { CompanyTabs } from './CompanyTabs'
 import './AppShell.css'
 
 type AppShellProps = {
@@ -24,6 +25,7 @@ export function AppShell({ children }: AppShellProps) {
             <Link to={user ? `/mfa/setup?userId=${user.id}` : '/mfa/setup'}>Manage MFA</Link>
           </div>
         </header>
+        <CompanyTabs />
         <ModuleTabs />
         <main className="app-shell__main">{children ?? <Outlet />}</main>
       </div>

@@ -15,14 +15,13 @@ import {
   getSectionIcon,
   IconBuilding,
   IconChevron,
-  IconDot,
   IconLogout,
   IconMinus,
   IconPlus,
   IconSearch,
-  IconStore,
 } from '@/components/navigation/SidebarIcons'
 import { useAuthStore } from '@/stores/authStore'
+import { useCompanyStore } from '@/stores/companyStore'
 import { logout } from '@/modules/core/auth/services/authService'
 import { fetchCompanies } from '@/modules/core/identity/services/identityService'
 import type { CompanyRecord } from '@/modules/core/identity/types/identity'
@@ -31,7 +30,12 @@ import './Sidebar.css'
 
 const GROUP_COMPANIES_LABEL = 'GROUP COMPANIES'
 const COLLAPSED_STORAGE_KEY = 'aios.sidebar.collapsed'
-const COMPANY_STORAGE_KEY = 'aios.companyId'
+
+/**
+ * Grace period before hover-opened popovers close. Has to be long enough to
+ * cross the gap between two stacked flyouts (or move onto a side panel).
+ */
+const POPOVER_HIDE_DELAY_MS = 320
 
 /**
  * Sections that keep expanding inline inside the sidebar. Every other section
@@ -114,31 +118,26 @@ async function loadGroupCompaniesData(): Promise<{
 
 function GroupCompaniesBlock({
   open,
-  collapsed,
-  items,
-  highlightedLevel2Id,
-  onToggle,
-  onHoverItem,
-  onLeaveItems,
-  onSelectItem,
+  onOpen,
+  onLeave,
 }: {
   open: boolean
-  collapsed: boolean
-  items: Level2Item[]
-  highlightedLevel2Id: string | null
-  onToggle: () => void
-  onHoverItem: (item: Level2Item, anchor: HTMLButtonElement) => void
-  onLeaveItems: () => void
-  onSelectItem: (item: Level2Item) => void
+  onOpen: (anchor: HTMLButtonElement) => void
+  onLeave: () => void
 }) {
   return (
     <div className={['sidebar__context-group', open ? 'is-open' : ''].filter(Boolean).join(' ')}>
       <button
         type="button"
         className={['sidebar__item', 'sidebar__context-toggle', open ? 'is-open' : ''].filter(Boolean).join(' ')}
+        aria-haspopup="true"
         aria-expanded={open}
+        data-group-panel="true"
         title={GROUP_COMPANIES_LABEL}
-        onClick={onToggle}
+        onMouseEnter={(event) => onOpen(event.currentTarget)}
+        onMouseLeave={onLeave}
+        onFocus={(event) => onOpen(event.currentTarget)}
+        onClick={(event) => onOpen(event.currentTarget)}
       >
         <span className="sidebar__row-main">
           <span className="sidebar__icon">
@@ -146,63 +145,35 @@ function GroupCompaniesBlock({
           </span>
           <span className="sidebar__label">{GROUP_COMPANIES_LABEL}</span>
         </span>
-        {!collapsed ? (
-          <span className="sidebar__expander" aria-hidden>
-            {open ? <IconMinus /> : <IconPlus />}
-          </span>
-        ) : null}
+        <span className="sidebar__expander" aria-hidden>
+          <IconChevron />
+        </span>
       </button>
-      {open && !collapsed ? (
-        <ul className="sidebar__context-tree" onMouseLeave={onLeaveItems}>
-          {items.length === 0 ? (
-            <li>
-              <span className="sidebar__context-empty">No groups or companies</span>
-            </li>
-          ) : (
-            items.map((item) => {
-              const highlighted = item.id === highlightedLevel2Id
-              return (
-                <li key={`${item.kind}-${item.id}`}>
-                  <button
-                    type="button"
-                    className={['sidebar__context-option', highlighted ? 'is-selected' : '']
-                      .filter(Boolean)
-                      .join(' ')}
-                    onMouseEnter={(event) => onHoverItem(item, event.currentTarget)}
-                    onFocus={(event) => onHoverItem(item, event.currentTarget)}
-                    onClick={() => onSelectItem(item)}
-                  >
-                    <span className="sidebar__label">{item.label}</span>
-                  </button>
-                </li>
-              )
-            })
-          )}
-        </ul>
-      ) : null}
     </div>
   )
 }
 
-function GroupCompaniesFlyout({
-  companies,
-  selectedCompanyId,
+function GroupCompaniesPanel({
+  items,
+  highlightedLevel2Id,
   top,
-  onSelectCompany,
+  onHoverItem,
+  onSelectItem,
   onMouseEnter,
   onMouseLeave,
 }: {
-  companies: CompanyOption[]
-  selectedCompanyId: string
+  items: Level2Item[]
+  highlightedLevel2Id: string | null
   top: number
-  onSelectCompany: (companyId: string) => void
+  onHoverItem: (item: Level2Item) => void
+  onSelectItem: (item: Level2Item) => void
   onMouseEnter: () => void
   onMouseLeave: () => void
 }) {
   return (
     <aside
-      className="sidebar-flyout"
-      aria-label="Companies"
+      className="sidebar-flyout sidebar-flyout--groups"
+      aria-label={GROUP_COMPANIES_LABEL}
       style={{ top }}
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
@@ -210,34 +181,38 @@ function GroupCompaniesFlyout({
       <div className="sidebar-flyout__inner">
         <section className="sidebar-flyout__section">
           <header className="sidebar-flyout__section-head">
-            <IconStore />
-            <span>Companies ({companies.length})</span>
+            <IconBuilding />
+            <span>{GROUP_COMPANIES_LABEL}</span>
           </header>
           <ul className="sidebar-flyout__list">
-            {companies.length === 0 ? (
+            {items.length === 0 ? (
               <li>
-                <span className="sidebar__context-empty">No companies in this group</span>
+                <span className="sidebar__context-empty">No groups or companies</span>
               </li>
             ) : (
-              companies.map((company) => {
-                const selected = company.value === selectedCompanyId
+              items.map((item) => {
+                const highlighted = item.id === highlightedLevel2Id
                 return (
-                  <li key={company.value}>
+                  <li key={`${item.kind}-${item.id}`}>
                     <button
                       type="button"
                       className={[
                         'sidebar-flyout__link',
                         'sidebar-flyout__link--button',
-                        selected ? 'sidebar-flyout__link--active' : '',
+                        highlighted ? 'sidebar-flyout__link--active' : '',
                       ]
                         .filter(Boolean)
                         .join(' ')}
-                      onClick={() => onSelectCompany(company.value)}
+                      onMouseEnter={() => onHoverItem(item)}
+                      onFocus={() => onHoverItem(item)}
+                      onClick={() => onSelectItem(item)}
                     >
-                      <span className="sidebar-flyout__link-icon" aria-hidden>
-                        <IconDot />
-                      </span>
-                      <span className="sidebar-flyout__link-label">{company.label}</span>
+                      <span className="sidebar-flyout__link-label">{item.label}</span>
+                      {item.kind === 'group' ? (
+                        <span className="sidebar-flyout__link-expander" aria-hidden>
+                          <IconChevron />
+                        </span>
+                      ) : null}
                     </button>
                   </li>
                 )
@@ -611,13 +586,16 @@ export function Sidebar() {
   const user = useAuthStore((state) => state.user)
   const isHydrated = useAuthStore((state) => state.isHydrated)
   const [query, setQuery] = useState('')
-  const [companyId, setCompanyId] = useState(() => window.localStorage.getItem(COMPANY_STORAGE_KEY) ?? '')
-  const [companyOptions, setCompanyOptions] = useState<CompanyOption[]>([])
-  const [companyGroups, setCompanyGroups] = useState<CompanyGroupRecord[]>([])
+  const companyId = useCompanyStore((state) => state.companyId)
+  const companyOptions = useCompanyStore((state) => state.companies)
+  const companyGroups = useCompanyStore((state) => state.groups)
+  const setCompanyData = useCompanyStore((state) => state.setData)
+  const setActiveCompany = useCompanyStore((state) => state.setCompany)
+  const setPreviewGroup = useCompanyStore((state) => state.setPreviewGroup)
   const [collapsed, setCollapsed] = useState(() => {
     return window.sessionStorage.getItem(COLLAPSED_STORAGE_KEY) === '1'
   })
-  const [groupCompaniesOpen, setGroupCompaniesOpen] = useState(true)
+  const [companiesPanelOpen, setCompaniesPanelOpen] = useState(false)
   const [hoveredGroupId, setHoveredGroupId] = useState<string | null>(null)
   const [flyoutSectionId, setFlyoutSectionId] = useState<string | null>(null)
   const [popoverAnchor, setPopoverAnchor] = useState({ top: 0, center: 0 })
@@ -653,8 +631,10 @@ export function Sidebar() {
     window.sessionStorage.setItem(COLLAPSED_STORAGE_KEY, collapsed ? '1' : '0')
     if (collapsed) {
       setHoveredGroupId(null)
+      setCompaniesPanelOpen(false)
+      setPreviewGroup(null)
     }
-  }, [collapsed])
+  }, [collapsed, setPreviewGroup])
 
   useEffect(() => {
     return () => {
@@ -665,7 +645,7 @@ export function Sidebar() {
   }, [])
 
   useEffect(() => {
-    if (flyoutSectionId === null && iconTipLabel === null) {
+    if (flyoutSectionId === null && iconTipLabel === null && !companiesPanelOpen) {
       return
     }
 
@@ -674,7 +654,12 @@ export function Sidebar() {
       if (!(target instanceof Element)) {
         return
       }
-      if (target.closest('.sidebar-flyout--modules') || target.closest('[data-section-flyout="true"]')) {
+      if (
+        target.closest('.sidebar-flyout--modules') ||
+        target.closest('.sidebar-flyout--groups') ||
+        target.closest('[data-section-flyout="true"]') ||
+        target.closest('[data-group-panel="true"]')
+      ) {
         return
       }
       closePopovers()
@@ -692,7 +677,7 @@ export function Sidebar() {
       document.removeEventListener('pointerdown', handlePointerDown)
       document.removeEventListener('keydown', handleKeyDown)
     }
-  }, [flyoutSectionId, iconTipLabel])
+  }, [flyoutSectionId, iconTipLabel, companiesPanelOpen])
 
   useEffect(() => {
     if (!isHydrated) {
@@ -704,23 +689,12 @@ export function Sidebar() {
       if (cancelled) {
         return
       }
-      setCompanyOptions(companies)
-      setCompanyGroups(groups)
-      setCompanyId((current) => {
-        if (current && companies.some((item) => item.value === current)) {
-          return current
-        }
-        const nextId = companies[0]?.value ?? ''
-        if (nextId) {
-          window.localStorage.setItem(COMPANY_STORAGE_KEY, nextId)
-        }
-        return nextId
-      })
+      setCompanyData(companies, groups)
     })
     return () => {
       cancelled = true
     }
-  }, [isHydrated])
+  }, [isHydrated, setCompanyData])
 
   async function handleLogout() {
     await logout()
@@ -744,8 +718,7 @@ export function Sidebar() {
   }
 
   function persistCompany(nextCompanyId: string) {
-    setCompanyId(nextCompanyId)
-    window.localStorage.setItem(COMPANY_STORAGE_KEY, nextCompanyId)
+    setActiveCompany(nextCompanyId)
   }
 
   function cancelHideFlyout() {
@@ -758,15 +731,21 @@ export function Sidebar() {
   function scheduleHideFlyout() {
     cancelHideFlyout()
     hideFlyoutTimerRef.current = window.setTimeout(() => {
-      closePopovers()
+      setHoveredGroupId(null)
+      setFlyoutSectionId(null)
+      setIconTipLabel(null)
+      setCompaniesPanelOpen(false)
+      setPreviewGroup(null)
       hideFlyoutTimerRef.current = null
-    }, 120)
+    }, POPOVER_HIDE_DELAY_MS)
   }
 
   function closePopovers() {
     setHoveredGroupId(null)
     setFlyoutSectionId(null)
     setIconTipLabel(null)
+    setCompaniesPanelOpen(false)
+    setPreviewGroup(null)
   }
 
   function measureAnchor(anchor: HTMLElement) {
@@ -782,24 +761,41 @@ export function Sidebar() {
     })
   }
 
-  function handleHoverLevel2(item: Level2Item, anchor: HTMLButtonElement) {
+  /**
+   * Level-1 panel. A group has no page of its own: hovering it previews its
+   * companies in the top company tabs, clicking it moves the active company
+   * into that group.
+   */
+  function handleHoverCompaniesItem(item: Level2Item) {
     cancelHideFlyout()
 
     if (item.kind === 'company') {
       setHoveredGroupId(null)
+      setPreviewGroup(null)
       return
     }
 
     setFlyoutSectionId(null)
     setIconTipLabel(null)
-    measureAnchor(anchor)
     setHoveredGroupId(item.id)
+    setPreviewGroup(item.id)
+  }
+
+  function handleOpenCompaniesPanel(anchor: HTMLButtonElement) {
+    cancelHideFlyout()
+    setHoveredGroupId(null)
+    setFlyoutSectionId(null)
+    setIconTipLabel(null)
+    measureAnchor(anchor)
+    setCompaniesPanelOpen(true)
   }
 
   function handleOpenSectionFlyout(section: SidebarSection, anchor: HTMLButtonElement) {
     cancelHideFlyout()
     setHoveredGroupId(null)
     setIconTipLabel(null)
+    setPreviewGroup(null)
+    setCompaniesPanelOpen(false)
     measureAnchor(anchor)
     setFlyoutSectionId(section.id)
   }
@@ -810,6 +806,7 @@ export function Sidebar() {
       cancelHideFlyout()
       setHoveredGroupId(null)
       setFlyoutSectionId(null)
+      setCompaniesPanelOpen(false)
       measureAnchor(anchor)
       setIconTipLabel(section.label)
       return
@@ -817,15 +814,22 @@ export function Sidebar() {
     handleOpenSectionFlyout(section, anchor)
   }
 
+  /**
+   * A group has no page of its own: clicking it moves the active company into
+   * that group, which makes its companies the tabs in the top bar.
+   */
   function handleSelectLevel2(item: Level2Item) {
-    if (item.kind === 'company') {
-      persistCompany(item.id)
-      setHoveredGroupId(null)
+    if (item.kind === 'group') {
+      const firstMemberId = item.companies[0]?.value
+      if (firstMemberId) {
+        persistCompany(firstMemberId)
+      }
+      closePopovers()
+      return
     }
-  }
 
-  function handleSelectCompanyFromGroup(nextCompanyId: string) {
-    persistCompany(nextCompanyId)
+    persistCompany(item.id)
+    closePopovers()
   }
 
   const activeCompany = companyOptions.find((item) => item.value === companyId) ?? null
@@ -834,12 +838,6 @@ export function Sidebar() {
     hoveredGroupId ??
     level2Items.find((item) => item.kind === 'company' && item.id === companyId)?.id ??
     null
-
-  const activeGroup = hoveredGroupId
-    ? level2Items.find((item): item is Extract<Level2Item, { kind: 'group' }> => {
-        return item.kind === 'group' && item.id === hoveredGroupId
-      })
-    : null
 
   const flyoutSection = flyoutSectionId
     ? sections.find((section) => section.id === flyoutSectionId) ?? null
@@ -894,22 +892,31 @@ export function Sidebar() {
       {!collapsed ? (
         <div className="sidebar__context">
           <GroupCompaniesBlock
-            open={groupCompaniesOpen}
-            collapsed={collapsed}
-            items={level2Items}
-            highlightedLevel2Id={highlightedLevel2Id}
-            onToggle={() => {
-              setGroupCompaniesOpen((current) => {
-                if (current) {
-                  setHoveredGroupId(null)
-                }
-                return !current
-              })
-            }}
-            onHoverItem={handleHoverLevel2}
-            onLeaveItems={scheduleHideFlyout}
-            onSelectItem={handleSelectLevel2}
+            open={companiesPanelOpen}
+            onOpen={handleOpenCompaniesPanel}
+            onLeave={scheduleHideFlyout}
           />
+        </div>
+      ) : null}
+
+      {collapsed ? (
+        <div className="sidebar__rail-context">
+          <button
+            type="button"
+            className="sidebar__item sidebar__section-icon-only"
+            aria-label={GROUP_COMPANIES_LABEL}
+            aria-haspopup="true"
+            aria-expanded={companiesPanelOpen}
+            data-group-panel="true"
+            onMouseEnter={(event) => handleOpenCompaniesPanel(event.currentTarget)}
+            onMouseLeave={scheduleHideFlyout}
+            onFocus={(event) => handleOpenCompaniesPanel(event.currentTarget)}
+            onClick={() => setCollapsed(false)}
+          >
+            <span className="sidebar__icon">
+              <IconBuilding />
+            </span>
+          </button>
         </div>
       ) : null}
 
@@ -959,12 +966,13 @@ export function Sidebar() {
       </div>
       </aside>
 
-      {activeGroup && !collapsed && groupCompaniesOpen ? (
-        <GroupCompaniesFlyout
-          companies={activeGroup.companies}
-          selectedCompanyId={companyId}
+      {companiesPanelOpen ? (
+        <GroupCompaniesPanel
+          items={level2Items}
+          highlightedLevel2Id={highlightedLevel2Id}
           top={popoverAnchor.top}
-          onSelectCompany={handleSelectCompanyFromGroup}
+          onHoverItem={handleHoverCompaniesItem}
+          onSelectItem={handleSelectLevel2}
           onMouseEnter={cancelHideFlyout}
           onMouseLeave={scheduleHideFlyout}
         />

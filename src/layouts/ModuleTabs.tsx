@@ -1,7 +1,7 @@
 import { useMemo } from 'react'
 import { NavLink, useLocation } from 'react-router-dom'
 import { findModuleByPath } from '@/navigation/sidebarNav'
-import './ModuleTabs.css'
+import './TopTabs.css'
 
 /**
  * Secondary navigation for the module the current route belongs to.
@@ -16,14 +16,14 @@ export function ModuleTabs() {
   }
 
   return (
-    <nav className="module-tabs" aria-label={`${match.module.label} sections`}>
-      <div className="module-tabs__inner">
+    <nav className="top-tabs" aria-label={`${match.module.label} sections`}>
+      <div className="top-tabs__inner">
         {match.items.map((item) => (
           <NavLink
             key={item.id}
             to={item.path}
             className={({ isActive }) =>
-              ['module-tabs__tab', isActive ? 'module-tabs__tab--active' : ''].filter(Boolean).join(' ')
+              ['top-tabs__tab', isActive ? 'top-tabs__tab--active' : ''].filter(Boolean).join(' ')
             }
           >
             {item.label}
