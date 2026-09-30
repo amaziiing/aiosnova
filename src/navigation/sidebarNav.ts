@@ -17,8 +17,6 @@ export type SidebarNode = SidebarLink | SidebarGroup
 export type SidebarSection = {
   id: string
   label: string
-  /** Render the children without the section heading row. */
-  hideLabel?: boolean
   children: SidebarNode[]
 }
 
@@ -79,8 +77,7 @@ export const sidebarUtilities: SidebarUtilityItem[] = [
 export const sidebarSections: SidebarSection[] = [
   {
     id: 'overview',
-    label: 'Overview',
-    hideLabel: true,
+    label: 'Dashboard',
     children: [
       group('Dashboard', '/overview', [
         'Executive Dashboard',
@@ -97,7 +94,6 @@ export const sidebarSections: SidebarSection[] = [
   {
     id: 'ai',
     label: 'AI',
-    hideLabel: true,
     children: [
       group('AI', '/ai', [
         'AI Assistant',

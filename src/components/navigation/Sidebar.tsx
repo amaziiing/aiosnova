@@ -1,23 +1,18 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { NavLink, useLocation } from 'react-router-dom'
 import {
-  collectAncestorGroupIds,
   filterSidebarSections,
   findModuleByPath,
   type SidebarLink,
-  type SidebarNode,
   type SidebarSection,
 } from '@/navigation/sidebarNav'
 import { BrandLogo } from '@/components/brand/BrandLogo'
 import {
-  getLinkIcon,
   getModuleIcon,
   getSectionIcon,
   IconBuilding,
   IconChevron,
   IconLogout,
-  IconMinus,
-  IconPlus,
   IconSearch,
 } from '@/components/navigation/SidebarIcons'
 import { useAuthStore } from '@/stores/authStore'
@@ -38,21 +33,11 @@ const COLLAPSED_STORAGE_KEY = 'aios.sidebar.collapsed'
 const POPOVER_HIDE_DELAY_MS = 320
 
 /**
- * Sections that keep expanding inline inside the sidebar. Every other section
- * opens its module list in a panel anchored to the right of the sidebar.
- * (Overview and AI render their single module directly - see `hideLabel`.)
- */
-const INLINE_SECTION_IDS = new Set(['overview', 'ai'])
-
-/**
  * A section is worth a chooser panel only when it actually offers a choice.
- * Single-module sections (Platform Admin) and the inline ones (Dashboard, AI)
- * get a plain name tip on the collapsed rail instead.
+ * Single-module sections (Dashboard, AI, Platform Admin) get a plain name tip on
+ * the collapsed rail and a direct link in the expanded sidebar instead.
  */
 function hasModuleChoice(section: SidebarSection): boolean {
-  if (INLINE_SECTION_IDS.has(section.id)) {
-    return false
-  }
   return section.children.filter((node) => node.kind === 'group').length > 1
 }
 
@@ -313,129 +298,35 @@ function SectionModulesFlyout({
   )
 }
 
-function collectGroupIds(nodes: SidebarNode[]): string[] {
-  const ids: string[] = []
-  for (const node of nodes) {
-    if (node.kind === 'group') {
-      ids.push(node.id, ...collectGroupIds(node.children))
-    }
-  }
-  return ids
-}
 
-/** `'customer-revenue.crm'` -> `['customer-revenue', 'customer-revenue.crm']` */
-function branchIds(id: string): string[] {
-  const segments = id.split('.')
-  return segments.map((_, index) => segments.slice(0, index + 1).join('.'))
-}
-
-function SidebarNodeList({
-  nodes,
-  depth,
-  openIds,
-  onToggle,
-  collapsed,
-}: {
-  nodes: SidebarNode[]
-  depth: number
-  openIds: Set<string>
-  onToggle: (id: string) => void
-  collapsed: boolean
-}) {
-  return (
-    <ul className={`sidebar__list sidebar__list--depth-${Math.min(depth, 2)}`}>
-      {nodes.map((node) => {
-        if (node.kind === 'link') {
-          const LinkIcon = getLinkIcon()
-          return (
-            <li key={node.id}>
-              <NavLink
-                to={node.path}
-                title={node.label}
-                className={({ isActive }) =>
-                  ['sidebar__link', isActive ? 'sidebar__link--active' : ''].filter(Boolean).join(' ')
-                }
-              >
-                {depth === 1 ? (
-                  <span className="sidebar__icon">
-                    <LinkIcon />
-                  </span>
-                ) : null}
-                <span className="sidebar__label">{node.label}</span>
-              </NavLink>
-            </li>
-          )
-        }
-
-        const isOpen = openIds.has(node.id) && !collapsed
-        const ModuleIcon = getModuleIcon(node.label)
-        return (
-          <li key={node.id} className={['sidebar__group', isOpen ? 'is-open' : ''].filter(Boolean).join(' ')}>
-            <button
-              type="button"
-              className={['sidebar__item', 'sidebar__group-toggle', isOpen ? 'is-open' : '']
-                .filter(Boolean)
-                .join(' ')}
-              aria-expanded={isOpen}
-              title={node.label}
-              onClick={() => onToggle(node.id)}
-            >
-              <span className="sidebar__row-main">
-                <span className="sidebar__icon">
-                  <ModuleIcon />
-                </span>
-                <span className="sidebar__label">{node.label}</span>
-              </span>
-              {!collapsed ? (
-                <span className="sidebar__expander" aria-hidden>
-                  {isOpen ? <IconMinus /> : <IconPlus />}
-                </span>
-              ) : null}
-            </button>
-            {isOpen ? (
-              <div className="sidebar__subtree">
-                <SidebarNodeList
-                  nodes={node.children}
-                  depth={depth + 1}
-                  openIds={openIds}
-                  onToggle={onToggle}
-                  collapsed={collapsed}
-                />
-              </div>
-            ) : null}
-          </li>
-        )
-      })}
-    </ul>
-  )
-}
-
+/**
+ * One sidebar section. Expanded it is either a right-side panel trigger, or -
+ * when the section has a single module - a plain link straight into it (the
+ * module tab bar in the top bar then handles the sub-pages).
+ */
 function SectionBlock({
   section,
-  openIds,
-  onToggle,
   collapsed,
   flyout,
   hover,
+  onExpand,
 }: {
   section: SidebarSection
-  openIds: Set<string>
-  onToggle: (id: string) => void
   collapsed: boolean
-  flyout?: {
+  flyout: {
     open: boolean
     onEnter: (anchor: HTMLButtonElement) => void
     onLeave: () => void
     onActivate: (anchor: HTMLButtonElement) => void
   }
   /** Collapsed rail: hovering an icon asks the parent for its name panel/tip. */
-  hover?: {
+  hover: {
     onEnter: (anchor: HTMLButtonElement) => void
     onLeave: () => void
   }
+  onExpand: () => void
 }) {
   const SectionIcon = getSectionIcon(section.id)
-  const sectionOpen = openIds.has(section.id) && !collapsed
   const location = useLocation()
 
   if (collapsed) {
@@ -445,10 +336,10 @@ function SectionBlock({
           type="button"
           className="sidebar__item sidebar__section-icon-only"
           aria-label={section.label}
-          onClick={() => onToggle(section.children[0]?.kind === 'group' ? section.children[0].id : section.id)}
-          onMouseEnter={(event) => hover?.onEnter(event.currentTarget)}
-          onMouseLeave={hover?.onLeave}
-          onFocus={(event) => hover?.onEnter(event.currentTarget)}
+          onClick={onExpand}
+          onMouseEnter={(event) => hover.onEnter(event.currentTarget)}
+          onMouseLeave={hover.onLeave}
+          onFocus={(event) => hover.onEnter(event.currentTarget)}
         >
           <span className="sidebar__icon">
             <SectionIcon />
@@ -458,78 +349,33 @@ function SectionBlock({
     )
   }
 
-  // Sections without a heading render their modules directly at level 1.
-  if (section.hideLabel) {
-    return (
-      <section className="sidebar__section">
-        <SidebarNodeList
-          nodes={section.children}
-          depth={1}
-          openIds={openIds}
-          onToggle={onToggle}
-          collapsed={collapsed}
-        />
-      </section>
-    )
-  }
-
-  // Sections opting into a right-side panel: the row opens the panel instead
-  // of pushing its modules down inside the sidebar.
-  if (flyout) {
-    // A section with a single module has nothing to choose between: send the row
-    // straight there and let the module tab bar handle the sub-pages.
-    const onlyModule =
-      section.children.length === 1 && section.children[0]?.kind === 'group'
-        ? section.children[0]
-        : null
-    const firstPage = onlyModule
-      ? onlyModule.children.find((child): child is SidebarLink => child.kind === 'link') ?? null
+  // A section with a single module has nothing to choose between: send the row
+  // straight there and let the module tab bar handle the sub-pages.
+  const onlyModule =
+    section.children.length === 1 && section.children[0]?.kind === 'group'
+      ? section.children[0]
       : null
+  const firstPage = onlyModule
+    ? onlyModule.children.find((child): child is SidebarLink => child.kind === 'link') ?? null
+    : null
 
-    if (onlyModule && firstPage) {
-      const alreadyInside = findModuleByPath(location.pathname)?.module.id === onlyModule.id
-
-      return (
-        <section className="sidebar__section">
-          <NavLink
-            to={alreadyInside ? location.pathname : firstPage.path}
-            title={section.label}
-            onClick={(event) => {
-              // Already there: don't push a duplicate history entry.
-              if (alreadyInside) {
-                event.preventDefault()
-              }
-            }}
-            className={['sidebar__item', 'sidebar__group-toggle', flyout.open ? 'is-open' : '']
-              .filter(Boolean)
-              .join(' ')}
-          >
-            <span className="sidebar__row-main">
-              <span className="sidebar__icon">
-                <SectionIcon />
-              </span>
-              <span className="sidebar__label">{section.label}</span>
-            </span>
-          </NavLink>
-        </section>
-      )
-    }
+  if (onlyModule && firstPage) {
+    const alreadyInside = findModuleByPath(location.pathname)?.module.id === onlyModule.id
 
     return (
       <section className="sidebar__section">
-        <button
-          type="button"
+        <NavLink
+          to={alreadyInside ? location.pathname : firstPage.path}
+          title={section.label}
+          onClick={(event) => {
+            // Already there: don't push a duplicate history entry.
+            if (alreadyInside) {
+              event.preventDefault()
+            }
+          }}
           className={['sidebar__item', 'sidebar__group-toggle', flyout.open ? 'is-open' : '']
             .filter(Boolean)
             .join(' ')}
-          aria-haspopup="true"
-          aria-expanded={flyout.open}
-          title={section.label}
-          data-section-flyout="true"
-          onMouseEnter={(event) => flyout.onEnter(event.currentTarget)}
-          onMouseLeave={flyout.onLeave}
-          onFocus={(event) => flyout.onEnter(event.currentTarget)}
-          onClick={(event) => flyout.onActivate(event.currentTarget)}
         >
           <span className="sidebar__row-main">
             <span className="sidebar__icon">
@@ -537,10 +383,7 @@ function SectionBlock({
             </span>
             <span className="sidebar__label">{section.label}</span>
           </span>
-          <span className="sidebar__expander" aria-hidden>
-            <IconChevron />
-          </span>
-        </button>
+        </NavLink>
       </section>
     )
   }
@@ -549,12 +392,17 @@ function SectionBlock({
     <section className="sidebar__section">
       <button
         type="button"
-        className={['sidebar__item', 'sidebar__group-toggle', sectionOpen ? 'is-open' : '']
+        className={['sidebar__item', 'sidebar__group-toggle', flyout.open ? 'is-open' : '']
           .filter(Boolean)
           .join(' ')}
-        aria-expanded={sectionOpen}
+        aria-haspopup="true"
+        aria-expanded={flyout.open}
         title={section.label}
-        onClick={() => onToggle(section.id)}
+        data-section-flyout="true"
+        onMouseEnter={(event) => flyout.onEnter(event.currentTarget)}
+        onMouseLeave={flyout.onLeave}
+        onFocus={(event) => flyout.onEnter(event.currentTarget)}
+        onClick={(event) => flyout.onActivate(event.currentTarget)}
       >
         <span className="sidebar__row-main">
           <span className="sidebar__icon">
@@ -563,20 +411,9 @@ function SectionBlock({
           <span className="sidebar__label">{section.label}</span>
         </span>
         <span className="sidebar__expander" aria-hidden>
-          {sectionOpen ? <IconMinus /> : <IconPlus />}
+          <IconChevron />
         </span>
       </button>
-      {sectionOpen ? (
-        <div className="sidebar__subtree">
-          <SidebarNodeList
-            nodes={section.children}
-            depth={2}
-            openIds={openIds}
-            onToggle={onToggle}
-            collapsed={collapsed}
-          />
-        </div>
-      ) : null}
     </section>
   )
 }
@@ -602,9 +439,12 @@ export function Sidebar() {
   const [iconTipLabel, setIconTipLabel] = useState<string | null>(null)
   const hideFlyoutTimerRef = useRef<number | null>(null)
   const shellRef = useRef<HTMLDivElement>(null)
-  const [openIds, setOpenIds] = useState<Set<string>>(() => new Set())
 
   const sections = useMemo(() => filterSidebarSections(query), [query])
+  const currentSectionId = useMemo(
+    () => findModuleByPath(location.pathname)?.section.id ?? null,
+    [location.pathname],
+  )
   const level2Items = useMemo(
     () => buildLevel2Items(companyOptions, companyGroups),
     [companyOptions, companyGroups],
@@ -615,17 +455,6 @@ export function Sidebar() {
     .join('')
     .slice(0, 2)
     .toUpperCase()
-
-  useEffect(() => {
-    if (query.trim()) {
-      setOpenIds(
-        new Set(sections.flatMap((section) => [section.id, ...collectGroupIds(section.children)])),
-      )
-      return
-    }
-    const ancestors = collectAncestorGroupIds(location.pathname)
-    setOpenIds(new Set(ancestors))
-  }, [location.pathname, query, sections])
 
   useEffect(() => {
     window.sessionStorage.setItem(COLLAPSED_STORAGE_KEY, collapsed ? '1' : '0')
@@ -698,23 +527,6 @@ export function Sidebar() {
 
   async function handleLogout() {
     await logout()
-  }
-
-  function handleToggle(id: string) {
-    if (collapsed) {
-      setCollapsed(false)
-      setOpenIds(new Set(branchIds(id)))
-      return
-    }
-
-    setOpenIds((current) => {
-      if (current.has(id) && !query.trim()) {
-        // Collapsing keeps the owning section open.
-        const segments = id.split('.')
-        return new Set(segments.length > 1 ? [segments[0]] : [])
-      }
-      return new Set(branchIds(id))
-    })
   }
 
   function persistCompany(nextCompanyId: string) {
@@ -927,23 +739,18 @@ export function Sidebar() {
           <SectionBlock
             key={section.id}
             section={section}
-            openIds={openIds}
-            onToggle={handleToggle}
             collapsed={collapsed}
-            flyout={
-              INLINE_SECTION_IDS.has(section.id)
-                ? undefined
-                : {
-                    open: flyoutSectionId === section.id || openIds.has(section.id),
-                    onEnter: (anchor) => handleOpenSectionFlyout(section, anchor),
-                    onLeave: scheduleHideFlyout,
-                    onActivate: (anchor) => handleOpenSectionFlyout(section, anchor),
-                  }
-            }
+            flyout={{
+              open: flyoutSectionId === section.id || currentSectionId === section.id,
+              onEnter: (anchor) => handleOpenSectionFlyout(section, anchor),
+              onLeave: scheduleHideFlyout,
+              onActivate: (anchor) => handleOpenSectionFlyout(section, anchor),
+            }}
             hover={{
               onEnter: (anchor) => handleHoverRailIcon(section, anchor),
               onLeave: scheduleHideFlyout,
             }}
+            onExpand={() => setCollapsed(false)}
           />
         ))}
       </nav>
