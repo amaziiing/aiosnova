@@ -12,13 +12,15 @@ type CompanyState = {
   groups: CompanyGroupRecord[]
   companyId: string
   /**
-   * Group whose companies the top bar previews. Set while hovering a group in
-   * the sidebar; `null` means "follow the active company".
+   * Company whose group the top bar previews. Set while hovering a row in the
+   * sidebar company panel; `null` means "follow the active company". A company
+   * that belongs to no group previews as empty, which is the point: the strip
+   * must not keep showing the previously previewed group.
    */
-  previewGroupId: string | null
+  previewCompanyId: string | null
   setData: (companies: CompanyOption[], groups: CompanyGroupRecord[]) => void
   setCompany: (companyId: string) => void
-  setPreviewGroup: (groupId: string | null) => void
+  setPreviewCompany: (companyId: string | null) => void
 }
 
 function readStoredCompanyId(): string {
@@ -44,7 +46,7 @@ export const useCompanyStore = create<CompanyState>((set, get) => ({
   companies: [],
   groups: [],
   companyId: readStoredCompanyId(),
-  previewGroupId: null,
+  previewCompanyId: null,
   setData: (companies, groups) => {
     const current = get().companyId
     const next =
@@ -68,9 +70,9 @@ export const useCompanyStore = create<CompanyState>((set, get) => ({
     }
     set({ companyId })
   },
-  setPreviewGroup: (previewGroupId) => {
-    if (get().previewGroupId !== previewGroupId) {
-      set({ previewGroupId })
+  setPreviewCompany: (previewCompanyId) => {
+    if (get().previewCompanyId !== previewCompanyId) {
+      set({ previewCompanyId })
     }
   },
 }))

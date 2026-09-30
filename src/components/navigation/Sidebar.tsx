@@ -591,7 +591,7 @@ export function Sidebar() {
   const companyGroups = useCompanyStore((state) => state.groups)
   const setCompanyData = useCompanyStore((state) => state.setData)
   const setActiveCompany = useCompanyStore((state) => state.setCompany)
-  const setPreviewGroup = useCompanyStore((state) => state.setPreviewGroup)
+  const setPreviewCompany = useCompanyStore((state) => state.setPreviewCompany)
   const [collapsed, setCollapsed] = useState(() => {
     return window.sessionStorage.getItem(COLLAPSED_STORAGE_KEY) === '1'
   })
@@ -632,9 +632,9 @@ export function Sidebar() {
     if (collapsed) {
       setHoveredGroupId(null)
       setCompaniesPanelOpen(false)
-      setPreviewGroup(null)
+      setPreviewCompany(null)
     }
-  }, [collapsed, setPreviewGroup])
+  }, [collapsed, setPreviewCompany])
 
   useEffect(() => {
     return () => {
@@ -735,7 +735,7 @@ export function Sidebar() {
       setFlyoutSectionId(null)
       setIconTipLabel(null)
       setCompaniesPanelOpen(false)
-      setPreviewGroup(null)
+      setPreviewCompany(null)
       hideFlyoutTimerRef.current = null
     }, POPOVER_HIDE_DELAY_MS)
   }
@@ -745,7 +745,7 @@ export function Sidebar() {
     setFlyoutSectionId(null)
     setIconTipLabel(null)
     setCompaniesPanelOpen(false)
-    setPreviewGroup(null)
+    setPreviewCompany(null)
   }
 
   function measureAnchor(anchor: HTMLElement) {
@@ -770,15 +770,17 @@ export function Sidebar() {
     cancelHideFlyout()
 
     if (item.kind === 'company') {
+      // Previewing a company previews *its* group - empty for standalone ones,
+      // so the strip never keeps showing the previously previewed group.
       setHoveredGroupId(null)
-      setPreviewGroup(null)
+      setPreviewCompany(item.id)
       return
     }
 
     setFlyoutSectionId(null)
     setIconTipLabel(null)
     setHoveredGroupId(item.id)
-    setPreviewGroup(item.id)
+    setPreviewCompany(item.companies[0]?.value ?? null)
   }
 
   function handleOpenCompaniesPanel(anchor: HTMLButtonElement) {
@@ -794,7 +796,7 @@ export function Sidebar() {
     cancelHideFlyout()
     setHoveredGroupId(null)
     setIconTipLabel(null)
-    setPreviewGroup(null)
+    setPreviewCompany(null)
     setCompaniesPanelOpen(false)
     measureAnchor(anchor)
     setFlyoutSectionId(section.id)
