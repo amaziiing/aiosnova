@@ -3,6 +3,8 @@ import { NavLink, useLocation } from 'react-router-dom'
 import {
   collectAncestorGroupIds,
   filterSidebarSections,
+  findModuleByPath,
+  type SidebarLink,
   type SidebarNode,
   type SidebarSection,
 } from '@/navigation/sidebarNav'
@@ -14,12 +16,14 @@ import {
   IconBuilding,
   IconChevron,
   IconDot,
+  IconLogout,
   IconMinus,
   IconPlus,
   IconSearch,
   IconStore,
 } from '@/components/navigation/SidebarIcons'
 import { useAuthStore } from '@/stores/authStore'
+import { logout } from '@/modules/core/auth/services/authService'
 import { fetchCompanies } from '@/modules/core/identity/services/identityService'
 import type { CompanyRecord } from '@/modules/core/identity/types/identity'
 import type { CompanyGroupRecord } from '@/mocks/data/identity'
@@ -28,6 +32,13 @@ import './Sidebar.css'
 const GROUP_COMPANIES_LABEL = 'GROUP COMPANIES'
 const COLLAPSED_STORAGE_KEY = 'aios.sidebar.collapsed'
 const COMPANY_STORAGE_KEY = 'aios.companyId'
+
+/**
+ * Sections that keep expanding inline inside the sidebar. Every other section
+ * opens its module list in a panel anchored to the right of the sidebar.
+ * (Overview and AI render their single module directly - see `hideLabel`.)
+ */
+const INLINE_SECTION_IDS = new Set(['overview', 'ai'])
 
 type CompanyOption = { value: string; label: string }
 
@@ -227,6 +238,94 @@ function GroupCompaniesFlyout({
   )
 }
 
+function SectionModulesFlyout({
+  section,
+  top,
+  onMouseEnter,
+  onMouseLeave,
+  onNavigate,
+}: {
+  section: SidebarSection
+  top: number
+  onMouseEnter: () => void
+  onMouseLeave: () => void
+  onNavigate: () => void
+}) {
+  const location = useLocation()
+  const SectionIcon = getSectionIcon(section.id)
+  const activeModuleId = findModuleByPath(location.pathname)?.module.id ?? null
+
+  return (
+    <aside
+      className="sidebar-flyout sidebar-flyout--modules"
+      aria-label={section.label}
+      style={{ top }}
+      onMouseEnter={onMouseEnter}
+      onMouseLeave={onMouseLeave}
+    >
+      <div className="sidebar-flyout__inner">
+        <section className="sidebar-flyout__section">
+          <header className="sidebar-flyout__section-head">
+            <SectionIcon />
+            <span>{section.label}</span>
+          </header>
+          <ul className="sidebar-flyout__list">
+            {section.children.map((node) => {
+              if (node.kind === 'link') {
+                return (
+                  <li key={node.id}>
+                    <NavLink to={node.path} className="sidebar-flyout__link" onClick={onNavigate}>
+                      <span className="sidebar-flyout__link-label">{node.label}</span>
+                    </NavLink>
+                  </li>
+                )
+              }
+
+              const ModuleIcon = getModuleIcon(node.label)
+              const target = node.children.find(
+                (child): child is SidebarLink => child.kind === 'link',
+              )
+
+              if (!target) {
+                return (
+                  <li key={node.id}>
+                    <span className="sidebar-flyout__link sidebar-flyout__link--static">
+                      <span className="sidebar-flyout__link-icon">
+                        <ModuleIcon />
+                      </span>
+                      <span className="sidebar-flyout__link-label">{node.label}</span>
+                    </span>
+                  </li>
+                )
+              }
+
+              return (
+                <li key={node.id}>
+                  <NavLink
+                    to={target.path}
+                    className={[
+                      'sidebar-flyout__link',
+                      activeModuleId === node.id ? 'sidebar-flyout__link--active' : '',
+                    ]
+                      .filter(Boolean)
+                      .join(' ')}
+                    onClick={onNavigate}
+                  >
+                    <span className="sidebar-flyout__link-icon">
+                      <ModuleIcon />
+                    </span>
+                    <span className="sidebar-flyout__link-label">{node.label}</span>
+                  </NavLink>
+                </li>
+              )
+            })}
+          </ul>
+        </section>
+      </div>
+    </aside>
+  )
+}
+
 function collectGroupIds(nodes: SidebarNode[]): string[] {
   const ids: string[] = []
   for (const node of nodes) {
@@ -235,6 +334,12 @@ function collectGroupIds(nodes: SidebarNode[]): string[] {
     }
   }
   return ids
+}
+
+/** `'customer-revenue.crm'` -> `['customer-revenue', 'customer-revenue.crm']` */
+function branchIds(id: string): string[] {
+  const segments = id.split('.')
+  return segments.map((_, index) => segments.slice(0, index + 1).join('.'))
 }
 
 function SidebarNodeList({
@@ -323,17 +428,26 @@ function SectionBlock({
   openIds,
   onToggle,
   collapsed,
+  flyout,
 }: {
   section: SidebarSection
   openIds: Set<string>
   onToggle: (id: string) => void
   collapsed: boolean
+  flyout?: {
+    open: boolean
+    onEnter: (anchor: HTMLButtonElement) => void
+    onLeave: () => void
+    onActivate: (anchor: HTMLButtonElement) => void
+  }
 }) {
   const SectionIcon = getSectionIcon(section.id)
+  const sectionOpen = openIds.has(section.id) && !collapsed
+  const location = useLocation()
 
-  return (
-    <section className="sidebar__section">
-      {collapsed ? (
+  if (collapsed) {
+    return (
+      <section className="sidebar__section">
         <button
           type="button"
           className="sidebar__item sidebar__section-icon-only"
@@ -344,18 +458,129 @@ function SectionBlock({
             <SectionIcon />
           </span>
         </button>
-      ) : (
-        <>
-          <p className="sidebar__section-label">{section.label}</p>
+      </section>
+    )
+  }
+
+  // Sections without a heading render their modules directly at level 1.
+  if (section.hideLabel) {
+    return (
+      <section className="sidebar__section">
+        <SidebarNodeList
+          nodes={section.children}
+          depth={1}
+          openIds={openIds}
+          onToggle={onToggle}
+          collapsed={collapsed}
+        />
+      </section>
+    )
+  }
+
+  // Sections opting into a right-side panel: the row opens the panel instead
+  // of pushing its modules down inside the sidebar.
+  if (flyout) {
+    // A section with a single module has nothing to choose between: send the row
+    // straight there and let the module tab bar handle the sub-pages.
+    const onlyModule =
+      section.children.length === 1 && section.children[0]?.kind === 'group'
+        ? section.children[0]
+        : null
+    const firstPage = onlyModule
+      ? onlyModule.children.find((child): child is SidebarLink => child.kind === 'link') ?? null
+      : null
+
+    if (onlyModule && firstPage) {
+      const alreadyInside = findModuleByPath(location.pathname)?.module.id === onlyModule.id
+
+      return (
+        <section className="sidebar__section">
+          <NavLink
+            to={alreadyInside ? location.pathname : firstPage.path}
+            title={section.label}
+            onClick={(event) => {
+              // Already there: don't push a duplicate history entry.
+              if (alreadyInside) {
+                event.preventDefault()
+              }
+            }}
+            className={['sidebar__item', 'sidebar__group-toggle', flyout.open ? 'is-open' : '']
+              .filter(Boolean)
+              .join(' ')}
+          >
+            <span className="sidebar__row-main">
+              <span className="sidebar__icon">
+                <SectionIcon />
+              </span>
+              <span className="sidebar__label">{section.label}</span>
+            </span>
+          </NavLink>
+        </section>
+      )
+    }
+
+    return (
+      <section className="sidebar__section">
+        <button
+          type="button"
+          className={['sidebar__item', 'sidebar__group-toggle', flyout.open ? 'is-open' : '']
+            .filter(Boolean)
+            .join(' ')}
+          aria-haspopup="true"
+          aria-expanded={flyout.open}
+          title={section.label}
+          data-section-flyout="true"
+          onMouseEnter={(event) => flyout.onEnter(event.currentTarget)}
+          onMouseLeave={flyout.onLeave}
+          onFocus={(event) => flyout.onEnter(event.currentTarget)}
+          onClick={(event) => flyout.onActivate(event.currentTarget)}
+        >
+          <span className="sidebar__row-main">
+            <span className="sidebar__icon">
+              <SectionIcon />
+            </span>
+            <span className="sidebar__label">{section.label}</span>
+          </span>
+          <span className="sidebar__expander" aria-hidden>
+            <IconChevron />
+          </span>
+        </button>
+      </section>
+    )
+  }
+
+  return (
+    <section className="sidebar__section">
+      <button
+        type="button"
+        className={['sidebar__item', 'sidebar__group-toggle', sectionOpen ? 'is-open' : '']
+          .filter(Boolean)
+          .join(' ')}
+        aria-expanded={sectionOpen}
+        title={section.label}
+        onClick={() => onToggle(section.id)}
+      >
+        <span className="sidebar__row-main">
+          <span className="sidebar__icon">
+            <SectionIcon />
+          </span>
+          <span className="sidebar__label">{section.label}</span>
+        </span>
+        <span className="sidebar__expander" aria-hidden>
+          {sectionOpen ? <IconMinus /> : <IconPlus />}
+        </span>
+      </button>
+      {sectionOpen ? (
+        <div className="sidebar__subtree">
           <SidebarNodeList
             nodes={section.children}
-            depth={1}
+            depth={2}
             openIds={openIds}
             onToggle={onToggle}
             collapsed={collapsed}
           />
-        </>
-      )}
+        </div>
+      ) : null}
     </section>
   )
 }
@@ -373,6 +598,7 @@ export function Sidebar() {
   })
   const [groupCompaniesOpen, setGroupCompaniesOpen] = useState(true)
   const [hoveredGroupId, setHoveredGroupId] = useState<string | null>(null)
+  const [flyoutSectionId, setFlyoutSectionId] = useState<string | null>(null)
   const [flyoutTop, setFlyoutTop] = useState(0)
   const hideFlyoutTimerRef = useRef<number | null>(null)
   const shellRef = useRef<HTMLDivElement>(null)
@@ -392,12 +618,13 @@ export function Sidebar() {
 
   useEffect(() => {
     if (query.trim()) {
-      setOpenIds(new Set(sections.flatMap((section) => collectGroupIds(section.children))))
+      setOpenIds(
+        new Set(sections.flatMap((section) => [section.id, ...collectGroupIds(section.children)])),
+      )
       return
     }
     const ancestors = collectAncestorGroupIds(location.pathname)
-    const groupId = ancestors.length > 1 ? ancestors[ancestors.length - 1] : ancestors[0]
-    setOpenIds(groupId ? new Set([groupId]) : new Set())
+    setOpenIds(new Set(ancestors))
   }, [location.pathname, query, sections])
 
   useEffect(() => {
@@ -414,6 +641,36 @@ export function Sidebar() {
       }
     }
   }, [])
+
+  useEffect(() => {
+    if (flyoutSectionId === null) {
+      return
+    }
+
+    function handlePointerDown(event: PointerEvent) {
+      const target = event.target
+      if (!(target instanceof Element)) {
+        return
+      }
+      if (target.closest('.sidebar-flyout--modules') || target.closest('[data-section-flyout="true"]')) {
+        return
+      }
+      setFlyoutSectionId(null)
+    }
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === 'Escape') {
+        setFlyoutSectionId(null)
+      }
+    }
+
+    document.addEventListener('pointerdown', handlePointerDown)
+    document.addEventListener('keydown', handleKeyDown)
+    return () => {
+      document.removeEventListener('pointerdown', handlePointerDown)
+      document.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [flyoutSectionId])
 
   useEffect(() => {
     if (!isHydrated) {
@@ -443,18 +700,24 @@ export function Sidebar() {
     }
   }, [isHydrated])
 
+  async function handleLogout() {
+    await logout()
+  }
+
   function handleToggle(id: string) {
     if (collapsed) {
       setCollapsed(false)
-      setOpenIds(new Set([id]))
+      setOpenIds(new Set(branchIds(id)))
       return
     }
 
     setOpenIds((current) => {
       if (current.has(id) && !query.trim()) {
-        return new Set()
+        // Collapsing keeps the owning section open.
+        const segments = id.split('.')
+        return new Set(segments.length > 1 ? [segments[0]] : [])
       }
-      return new Set([id])
+      return new Set(branchIds(id))
     })
   }
 
@@ -474,8 +737,24 @@ export function Sidebar() {
     cancelHideFlyout()
     hideFlyoutTimerRef.current = window.setTimeout(() => {
       setHoveredGroupId(null)
+      setFlyoutSectionId(null)
       hideFlyoutTimerRef.current = null
     }, 120)
+  }
+
+  function closeFlyouts() {
+    setHoveredGroupId(null)
+    setFlyoutSectionId(null)
+  }
+
+  function positionFlyoutTop(anchor: HTMLElement) {
+    const shell = shellRef.current
+    if (!shell) {
+      return
+    }
+    const shellRect = shell.getBoundingClientRect()
+    const anchorRect = anchor.getBoundingClientRect()
+    setFlyoutTop(Math.max(0, anchorRect.top - shellRect.top))
   }
 
   function handleHoverLevel2(item: Level2Item, anchor: HTMLButtonElement) {
@@ -486,14 +765,16 @@ export function Sidebar() {
       return
     }
 
-    const shell = shellRef.current
-    if (shell) {
-      const shellRect = shell.getBoundingClientRect()
-      const anchorRect = anchor.getBoundingClientRect()
-      setFlyoutTop(Math.max(0, anchorRect.top - shellRect.top))
-    }
-
+    setFlyoutSectionId(null)
+    positionFlyoutTop(anchor)
     setHoveredGroupId(item.id)
+  }
+
+  function handleOpenSectionFlyout(section: SidebarSection, anchor: HTMLButtonElement) {
+    cancelHideFlyout()
+    setHoveredGroupId(null)
+    positionFlyoutTop(anchor)
+    setFlyoutSectionId(section.id)
   }
 
   function handleSelectLevel2(item: Level2Item) {
@@ -518,6 +799,10 @@ export function Sidebar() {
     ? level2Items.find((item): item is Extract<Level2Item, { kind: 'group' }> => {
         return item.kind === 'group' && item.id === hoveredGroupId
       })
+    : null
+
+  const flyoutSection = flyoutSectionId
+    ? sections.find((section) => section.id === flyoutSectionId) ?? null
     : null
 
   return (
@@ -596,6 +881,16 @@ export function Sidebar() {
             openIds={openIds}
             onToggle={handleToggle}
             collapsed={collapsed}
+            flyout={
+              INLINE_SECTION_IDS.has(section.id)
+                ? undefined
+                : {
+                    open: flyoutSectionId === section.id || openIds.has(section.id),
+                    onEnter: (anchor) => handleOpenSectionFlyout(section, anchor),
+                    onLeave: scheduleHideFlyout,
+                    onActivate: (anchor) => handleOpenSectionFlyout(section, anchor),
+                  }
+            }
           />
         ))}
       </nav>
@@ -608,6 +903,15 @@ export function Sidebar() {
           <strong>{user?.name ?? 'User'}</strong>
           <span>{user?.email ?? ''}</span>
         </div>
+        <button
+          type="button"
+          className="sidebar__logout"
+          aria-label="Log out"
+          title="Log out"
+          onClick={() => void handleLogout()}
+        >
+          <IconLogout />
+        </button>
       </div>
       </aside>
 
@@ -619,6 +923,16 @@ export function Sidebar() {
           onSelectCompany={handleSelectCompanyFromGroup}
           onMouseEnter={cancelHideFlyout}
           onMouseLeave={scheduleHideFlyout}
+        />
+      ) : null}
+
+      {flyoutSection && !collapsed ? (
+        <SectionModulesFlyout
+          section={flyoutSection}
+          top={flyoutTop}
+          onMouseEnter={cancelHideFlyout}
+          onMouseLeave={scheduleHideFlyout}
+          onNavigate={closeFlyouts}
         />
       ) : null}
     </div>

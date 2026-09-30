@@ -33,6 +33,16 @@ export function IconStore(props: IconProps) {
   )
 }
 
+export function IconLogout(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <path d="M15 4h3a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-3" />
+      <path d="M10 8l-4 4 4 4" />
+      <path d="M6 12h9" />
+    </Svg>
+  )
+}
+
 export function IconStar(props: IconProps) {
   return (
     <Svg {...props}>

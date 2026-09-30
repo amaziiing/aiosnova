@@ -17,6 +17,8 @@ export type SidebarNode = SidebarLink | SidebarGroup
 export type SidebarSection = {
   id: string
   label: string
+  /** Render the children without the section heading row. */
+  hideLabel?: boolean
   children: SidebarNode[]
 }
 
@@ -25,6 +27,12 @@ export type SidebarUtilityItem = {
   label: string
   path?: string
   action?: 'search' | 'tenant' | 'company'
+}
+
+export type ModuleMatch = {
+  section: SidebarSection
+  module: SidebarGroup
+  items: SidebarLink[]
 }
 
 function slugify(label: string): string {
@@ -72,6 +80,7 @@ export const sidebarSections: SidebarSection[] = [
   {
     id: 'overview',
     label: 'Overview',
+    hideLabel: true,
     children: [
       group('Dashboard', '/overview', [
         'Executive Dashboard',
@@ -88,6 +97,7 @@ export const sidebarSections: SidebarSection[] = [
   {
     id: 'ai',
     label: 'AI',
+    hideLabel: true,
     children: [
       group('AI', '/ai', [
         'AI Assistant',
@@ -493,6 +503,27 @@ export function collectAncestorGroupIds(pathname: string): string[] {
   }
 
   return ids
+}
+
+export function findModuleByPath(pathname: string): ModuleMatch | null {
+  for (const section of sidebarSections) {
+    for (const node of section.children) {
+      if (node.kind !== 'group') {
+        continue
+      }
+      const items = node.children.filter((child): child is SidebarLink => child.kind === 'link')
+      if (items.length === 0) {
+        continue
+      }
+      const matched = items.some(
+        (item) => pathname === item.path || pathname.startsWith(`${item.path}/`),
+      )
+      if (matched) {
+        return { section, module: node, items }
+      }
+    }
+  }
+  return null
 }
 
 export function filterSidebarSections(query: string): SidebarSection[] {

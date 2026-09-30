@@ -44,11 +44,6 @@
   flex-wrap: wrap;
 }
 
-.app-shell__user {
-  color: var(--color-text-muted);
-  font-size: var(--text-sm);
-}
-
 .app-shell__main {
   flex: 1;
   min-width: 0;
