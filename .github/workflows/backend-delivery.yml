@@ -64,6 +64,45 @@ jobs:
 
           ls -lh "backend-${GITHUB_SHA}.tar.gz"
 
+      - name: Sign Backend archive
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+        env:
+          BACKEND_DELIVERY_HMAC_KEY: ${{ secrets.BACKEND_DELIVERY_HMAC_KEY }}
+        run: |
+          set -euo pipefail
+
+          python3 - <<'PY'
+          import hashlib
+          import hmac
+          import os
+          import pathlib
+          import re
+
+          sha = os.environ["GITHUB_SHA"]
+          keyhex = os.environ["BACKEND_DELIVERY_HMAC_KEY"]
+
+          if not re.fullmatch(r"[0-9a-f]{64}", keyhex):
+              raise SystemExit("ERROR: invalid signing key")
+
+          archive = pathlib.Path(f"backend-{sha}.tar.gz")
+
+          with archive.open("rb") as f:
+              digest = hashlib.file_digest(f, "sha256").hexdigest()
+
+          payload = f"{sha}\n{digest}\n".encode()
+          signature = hmac.new(
+              bytes.fromhex(keyhex),
+              payload,
+              hashlib.sha256,
+          ).hexdigest()
+
+          pathlib.Path(f"backend-{sha}.sig").write_text(
+              signature + "\n"
+          )
+
+          print("BACKEND_SIGNATURE_CREATED")
+          PY
+
       - name: Configure SSH
         if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
         env:
@@ -83,7 +122,7 @@ jobs:
           printf '%s\n' "$EC2_KNOWN_HOSTS" > "$HOME/.ssh/known_hosts"
           chmod 600 "$HOME/.ssh/known_hosts"
 
-      - name: Upload image archive to EC2
+      - name: Upload signed image to EC2
         if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
         env:
           EC2_HOST: ${{ secrets.EC2_HOST }}
@@ -100,14 +139,8 @@ jobs:
             -o StrictHostKeyChecking=yes \
             -o ConnectTimeout=15 \
             "backend-${GITHUB_SHA}.tar.gz" \
-            "$EC2_USER@$EC2_HOST:/home/deploy/uploads/"
-
-          scp \
-            -i "$HOME/.ssh/deploy_key" \
-            -o IdentitiesOnly=yes \
-            -o StrictHostKeyChecking=yes \
-            -o ConnectTimeout=15 \
             "backend-${GITHUB_SHA}.sha256" \
+            "backend-${GITHUB_SHA}.sig" \
             "$EC2_USER@$EC2_HOST:/home/deploy/uploads/"
 
       - name: Verify uploaded image
@@ -126,7 +159,7 @@ jobs:
             "$EC2_USER@$EC2_HOST" \
             "cd /home/deploy/uploads && sha256sum -c backend-${GITHUB_SHA}.sha256"
 
-          echo "Backend image delivered and verified."
+          echo "Backend archive uploaded and checksum verified."
 
       - name: Publish Backend on EC2
         if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
