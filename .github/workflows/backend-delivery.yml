@@ -57,7 +57,7 @@ jobs:
           ls -lh "backend-${GITHUB_SHA}.tar.gz"
 
       - name: Configure SSH for manual main delivery
-        if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
         env:
           EC2_SSH_KEY: ${{ secrets.EC2_SSH_KEY }}
           EC2_KNOWN_HOSTS: ${{ secrets.EC2_KNOWN_HOSTS }}
@@ -76,7 +76,7 @@ jobs:
           chmod 600 "$HOME/.ssh/known_hosts"
 
       - name: Upload image archive to EC2
-        if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
         env:
           EC2_HOST: ${{ secrets.EC2_HOST }}
           EC2_USER: ${{ secrets.EC2_USER }}
@@ -103,7 +103,7 @@ jobs:
             "$EC2_USER@$EC2_HOST:/home/deploy/uploads/"
 
       - name: Verify uploaded image
-        if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
         env:
           EC2_HOST: ${{ secrets.EC2_HOST }}
           EC2_USER: ${{ secrets.EC2_USER }}
@@ -117,4 +117,22 @@ jobs:
             "$EC2_USER@$EC2_HOST" \
             "cd /home/deploy/uploads && sha256sum -c backend-${GITHUB_SHA}.sha256"
 
-          echo "Backend image delivered and verified."  
+          echo "Backend image delivered and verified."
+
+                - name: Publish Backend on EC2
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+        env:
+          EC2_HOST: ${{ secrets.EC2_HOST }}
+          EC2_USER: ${{ secrets.EC2_USER }}
+        run: |
+          set -euo pipefail
+
+          ssh \
+            -i "$HOME/.ssh/deploy_key" \
+            -o IdentitiesOnly=yes \
+            -o StrictHostKeyChecking=yes \
+            -o ConnectTimeout=15 \
+            "$EC2_USER@$EC2_HOST" \
+            "sudo -n /usr/local/sbin/aiosnova-backend-ci ${GITHUB_SHA}"
+
+          echo "Backend deployment completed."
