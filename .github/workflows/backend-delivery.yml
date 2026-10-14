@@ -1,6 +1,13 @@
 name: Backend ARM64 Image Delivery
 
 on:
+  push:
+    branches:
+      - main
+    paths:
+      - "server/**"
+      - ".github/workflows/backend-delivery.yml"
+
   pull_request:
     branches:
       - main
@@ -119,7 +126,7 @@ jobs:
 
           echo "Backend image delivered and verified."
 
-                - name: Publish Backend on EC2
+      - name: Publish Backend on EC2
         if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
         env:
           EC2_HOST: ${{ secrets.EC2_HOST }}
@@ -130,7 +137,7 @@ jobs:
           ssh \
             -i "$HOME/.ssh/deploy_key" \
             -o IdentitiesOnly=yes \
-            -o StrictHostKeyChecking=yes \
+            -o StrictHostKeyChecking=yes \  
             -o ConnectTimeout=15 \
             "$EC2_USER@$EC2_HOST" \
             "sudo -n /usr/local/sbin/aiosnova-backend-ci ${GITHUB_SHA}"
