@@ -99,4 +99,22 @@ jobs:
             -o IdentitiesOnly=yes \
             -o StrictHostKeyChecking=yes \
             -o ConnectTimeout=15 \
-            "backend-${G
+            "backend-${GITHUB_SHA}.sha256" \
+            "$EC2_USER@$EC2_HOST:/home/deploy/uploads/"
+
+      - name: Verify uploaded image
+        if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
+        env:
+          EC2_HOST: ${{ secrets.EC2_HOST }}
+          EC2_USER: ${{ secrets.EC2_USER }}
+        run: |
+          set -euo pipefail
+
+          ssh \
+            -i "$HOME/.ssh/deploy_key" \
+            -o IdentitiesOnly=yes \
+            -o StrictHostKeyChecking=yes \
+            "$EC2_USER@$EC2_HOST" \
+            "cd /home/deploy/uploads && sha256sum -c backend-${GITHUB_SHA}.sha256"
+
+          echo "Backend image delivered and verified."  
