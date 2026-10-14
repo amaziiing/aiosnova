@@ -51,7 +51,7 @@ jobs:
           key: ${{ secrets.EC2_SSH_KEY }}
           port: 22
           source: frontend-release.tar.gz
-          target: /home/deploy/
+          target: /home/deploy/uploads/
 
       - name: Publish frontend
         uses: appleboy/ssh-action@v1.2.2
@@ -74,7 +74,7 @@ jobs:
             test ! -e "$TARGET"
             mkdir -m 2750 "$TARGET"
 
-            tar -xzf /home/deploy/frontend-release.tar.gz -C "$TARGET"
+            tar -xzf /home/deploy/uploads/frontend-release.tar.gz -C "$TARGET"
 
             test -s "$TARGET/index.html"
 
@@ -83,6 +83,6 @@ jobs:
 
             /usr/local/bin/aiosnova-frontend-release "$RELEASE_SHA"
 
-            rm -f /home/deploy/frontend-release.tar.gz
+            rm -f /home/deploy/uploads/frontend-release.tar.gz
 
             echo "Frontend deployed: $RELEASE_SHA"
