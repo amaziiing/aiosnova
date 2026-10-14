@@ -1,0 +1,102 @@
+name: Backend ARM64 Image Delivery
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "server/**"
+      - ".github/workflows/backend-delivery.yml"
+
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: aiosnova-backend-delivery
+  cancel-in-progress: false
+
+jobs:
+  build-and-deliver:
+    name: Build and Deliver ARM64 Image
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build ARM64 Docker archive
+        uses: docker/build-push-action@v6
+        with:
+          context: ./server
+          file: ./server/Dockerfile
+          platforms: linux/arm64
+          tags: aiosnova-backend:${{ github.sha }}
+          outputs: type=docker,dest=/tmp/backend-image.tar
+
+      - name: Compress image and create checksum
+        run: |
+          set -euo pipefail
+
+          gzip -1 /tmp/backend-image.tar
+
+          mv /tmp/backend-image.tar.gz \
+            "backend-${GITHUB_SHA}.tar.gz"
+
+          sha256sum "backend-${GITHUB_SHA}.tar.gz" \
+            > "backend-${GITHUB_SHA}.sha256"
+
+          ls -lh "backend-${GITHUB_SHA}.tar.gz"
+
+      - name: Configure SSH for manual main delivery
+        if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
+        env:
+          EC2_SSH_KEY: ${{ secrets.EC2_SSH_KEY }}
+          EC2_KNOWN_HOSTS: ${{ secrets.EC2_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+
+          test -n "$EC2_SSH_KEY"
+          test -n "$EC2_KNOWN_HOSTS"
+
+          install -m 700 -d "$HOME/.ssh"
+
+          printf '%s\n' "$EC2_SSH_KEY" > "$HOME/.ssh/deploy_key"
+          chmod 600 "$HOME/.ssh/deploy_key"
+
+          printf '%s\n' "$EC2_KNOWN_HOSTS" > "$HOME/.ssh/known_hosts"
+          chmod 600 "$HOME/.ssh/known_hosts"
+
+      - name: Upload image archive to EC2
+        if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
+        env:
+          EC2_HOST: ${{ secrets.EC2_HOST }}
+          EC2_USER: ${{ secrets.EC2_USER }}
+        run: |
+          set -euo pipefail
+
+          test -n "$EC2_HOST"
+          test -n "$EC2_USER"
+
+          scp \
+            -i "$HOME/.ssh/deploy_key" \
+            -o IdentitiesOnly=yes \
+            -o StrictHostKeyChecking=yes \
+            -o ConnectTimeout=15 \
+            "backend-${GITHUB_SHA}.tar.gz" \
+            "$EC2_USER@$EC2_HOST:/home/deploy/uploads/"
+
+          scp \
+            -i "$HOME/.ssh/deploy_key" \
+            -o IdentitiesOnly=yes \
+            -o StrictHostKeyChecking=yes \
+            -o ConnectTimeout=15 \
+            "backend-${G
