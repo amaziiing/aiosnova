@@ -4,6 +4,18 @@ on:
   push:
     branches:
       - main
+    paths:
+      - "src/**"
+      - "public/**"
+      - "index.html"
+      - "package.json"
+      - "package-lock.json"
+      - "vite.config.*"
+      - "tsconfig*.json"
+      - "postcss.config.*"
+      - "tailwind.config.*"
+      - ".npmrc"
+      - ".github/workflows/deploy.yml"
 
   workflow_dispatch:
 
