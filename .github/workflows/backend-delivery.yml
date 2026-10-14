@@ -1,3 +1,4 @@
+
 name: Backend ARM64 Image Delivery
 
 on:
@@ -63,7 +64,7 @@ jobs:
 
           ls -lh "backend-${GITHUB_SHA}.tar.gz"
 
-      - name: Configure SSH for manual main delivery
+      - name: Configure SSH
         if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
         env:
           EC2_SSH_KEY: ${{ secrets.EC2_SSH_KEY }}
@@ -121,6 +122,7 @@ jobs:
             -i "$HOME/.ssh/deploy_key" \
             -o IdentitiesOnly=yes \
             -o StrictHostKeyChecking=yes \
+            -o ConnectTimeout=15 \
             "$EC2_USER@$EC2_HOST" \
             "cd /home/deploy/uploads && sha256sum -c backend-${GITHUB_SHA}.sha256"
 
@@ -137,7 +139,7 @@ jobs:
           ssh \
             -i "$HOME/.ssh/deploy_key" \
             -o IdentitiesOnly=yes \
-            -o StrictHostKeyChecking=yes \  
+            -o StrictHostKeyChecking=yes \
             -o ConnectTimeout=15 \
             "$EC2_USER@$EC2_HOST" \
             "sudo -n /usr/local/sbin/aiosnova-backend-ci ${GITHUB_SHA}"
